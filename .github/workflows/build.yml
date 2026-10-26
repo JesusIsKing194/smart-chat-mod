@@ -15,22 +15,19 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Create settings.gradle if missing
+      - name: Ensure Project Structure
         run: |
           if [ ! -f settings.gradle ]; then
             echo "rootProject.name = 'smart-chat-mod'" > settings.gradle
           fi
 
-      - name: Build with Gradle & Remap Jar
+      - name: Generate Wrapper & Build Remap Jar
         run: |
-          wget https://services.gradle.org/distributions/gradle-8.5-bin.zip
-          unzip -q gradle-8.5-bin.zip
-          export PATH=$PWD/gradle-8.5/bin:$PATH
-          gradle build remapJar
+          gradle wrapper --gradle-version 8.5
+          ./gradlew build remapJar --stacktrace
 
       - name: Upload Artifact (.jar file)
         uses: actions/upload-artifact@v4
         with:
           name: smart-chat-mod-jar
           path: build/libs/*.jar
-          if-no-files-found: ignore
