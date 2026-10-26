@@ -29,10 +29,9 @@ jobs:
       - name: Build Mod Jar
         run: gradle jar
 
-      - name: Upload Artifact (.jar file)
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: smart-chat-mod-jar
-          path: |
-            build/libs/*.jar
-            **/build/libs/*.jar
+          path: '**/*.jar'
+          if-no-files-found: ignore
