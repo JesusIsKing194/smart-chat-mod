@@ -15,28 +15,18 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Ensure settings.gradle
-        run: |
-          if [ ! -f settings.gradle ]; then
-            echo "rootProject.name = 'smart-chat-mod'" > settings.gradle
-          fi
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.5'
 
-      - name: Build Project
+      - name: Build Project inside Mod Directory
         run: gradle build
-
-      - name: Find output files
-        run: |
-          echo "=== Searching for all .jar files in workspace ==="
-          find . -name "*.jar"
+        working-directory: src/main/java/com/example/smartchat
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: smart-chat-mod-jar
-          path: '**/*.jar'
-          if-no-files-found: ignore
+          path: 'src/main/java/com/example/smartchat/build/libs/*.jar'
+          if-no-files-found: warn
