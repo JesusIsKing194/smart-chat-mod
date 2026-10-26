@@ -21,15 +21,18 @@ jobs:
             echo "rootProject.name = 'smart-chat-mod'" > settings.gradle
           fi
 
-      - name: Download Gradle & Build with Stacktrace
+      - name: Build with Gradle
         run: |
           wget https://services.gradle.org/distributions/gradle-8.5-bin.zip
           unzip -q gradle-8.5-bin.zip
           export PATH=$PWD/gradle-8.5/bin:$PATH
-          gradle build --stacktrace || (echo "BUILD FAILED" && exit 1)
+          gradle build
 
       - name: Upload Artifact (.jar file)
         uses: actions/upload-artifact@v4
         with:
           name: smart-chat-mod-jar
-          path: build/libs/*.jar
+          path: |
+            build/libs/*.jar
+            app/build/libs/*.jar
+          if-no-files-found: ignore
