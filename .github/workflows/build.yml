@@ -15,11 +15,12 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Generate Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.5
-
-      - name: Build with Gradle
-        run: ./gradlew build
+      - name: Download Gradle Distribution & Build
+        run: |
+          wget https://services.gradle.org/distributions/gradle-8.5-bin.zip
+          unzip gradle-8.5-bin.zip
+          export PATH=$PWD/gradle-8.5/bin:$PATH
+          gradle build
 
       - name: Upload Artifact (.jar file)
         uses: actions/upload-artifact@v4
