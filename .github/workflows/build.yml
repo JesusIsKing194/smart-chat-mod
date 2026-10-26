@@ -21,10 +21,11 @@ jobs:
             echo "rootProject.name = 'smart-chat-mod'" > settings.gradle
           fi
 
-      - name: Generate Wrapper & Build Remap Jar
+      - name: Download Gradle & Build Remap Jar
         run: |
-          gradle wrapper --gradle-version 8.5
-          ./gradlew build remapJar --stacktrace
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+          unzip -q gradle-8.5-bin.zip
+          ./gradle-8.5/bin/gradle build remapJar --stacktrace
 
       - name: Upload Artifact (.jar file)
         uses: actions/upload-artifact@v4
