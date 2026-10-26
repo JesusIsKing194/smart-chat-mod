@@ -1,0 +1,28 @@
+name: Build Fabric Mod
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew || true
+
+      - name: Build with Gradle
+        run: gradle build
+
+      - name: Upload Artifact (.jar file)
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-chat-mod-jar
+          path: build/libs/*.jar
