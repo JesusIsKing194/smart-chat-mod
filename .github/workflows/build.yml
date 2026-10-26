@@ -27,10 +27,13 @@ jobs:
           gradle-version: '8.5'
 
       - name: Execute Gradle Build
-        run: gradle build remapJar
+        run: gradle build
 
       - name: Upload Artifact (.jar file)
         uses: actions/upload-artifact@v4
         with:
           name: smart-chat-mod-jar
-          path: build/libs/*.jar
+          path: |
+            build/libs/*.jar
+            **/build/libs/*.jar
+          if-no-files-found: warn
