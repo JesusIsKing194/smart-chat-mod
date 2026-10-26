@@ -27,7 +27,7 @@ jobs:
           gradle-version: '8.5'
 
       - name: Execute Gradle Build
-        run: gradle build
+        run: gradle build remapJar
 
       - name: Upload Artifact (.jar file)
         uses: actions/upload-artifact@v4
