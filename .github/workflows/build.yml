@@ -21,18 +21,16 @@ jobs:
             echo "rootProject.name = 'smart-chat-mod'" > settings.gradle
           fi
 
-      - name: Build with Gradle
+      - name: Build with Gradle & Remap Jar
         run: |
           wget https://services.gradle.org/distributions/gradle-8.5-bin.zip
           unzip -q gradle-8.5-bin.zip
           export PATH=$PWD/gradle-8.5/bin:$PATH
-          gradle build
+          gradle build remapJar
 
       - name: Upload Artifact (.jar file)
         uses: actions/upload-artifact@v4
         with:
           name: smart-chat-mod-jar
-          path: |
-            build/libs/*.jar
-            app/build/libs/*.jar
+          path: build/libs/*.jar
           if-no-files-found: ignore
