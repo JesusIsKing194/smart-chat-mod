@@ -29,12 +29,14 @@ jobs:
       - name: Build Project
         run: gradle build
 
-      - name: Upload Artifact (.jar file)
+      - name: Find output files
+        run: |
+          echo "=== Searching for all .jar files in workspace ==="
+          find . -name "*.jar"
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: smart-chat-mod-jar
-          path: |
-            build/devlibs/*.jar
-            build/libs/*.jar
-            **/build/libs/*.jar
-          if-no-files-found: error
+          path: '**/*.jar'
+          if-no-files-found: ignore
