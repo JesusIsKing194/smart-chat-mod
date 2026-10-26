@@ -26,8 +26,8 @@ jobs:
         with:
           gradle-version: '8.5'
 
-      - name: Execute Gradle Build
-        run: gradle build
+      - name: Build Mod Jar
+        run: gradle jar
 
       - name: Upload Artifact (.jar file)
         uses: actions/upload-artifact@v4
@@ -36,4 +36,3 @@ jobs:
           path: |
             build/libs/*.jar
             **/build/libs/*.jar
-          if-no-files-found: warn
