@@ -2,31 +2,52 @@ package com.example.smartchat;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
-import net.minecraft.block.*;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.entity.*;
-import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.Heightmap;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.item.FallingBlockEntity;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.item.PrimedTnt;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.level.block.AnvilBlock;
+import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CartographyTableBlock;
+import net.minecraft.world.level.block.CraftingTableBlock;
+import net.minecraft.world.level.block.EnchantingTableBlock;
+import net.minecraft.world.level.block.EnderChestBlock;
+import net.minecraft.world.level.block.GrindstoneBlock;
+import net.minecraft.world.level.block.LoomBlock;
+import net.minecraft.world.level.block.SmithingTableBlock;
+import net.minecraft.world.level.block.StonecutterBlock;
+import net.minecraft.world.level.levelgen.Heightmap;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -42,7 +63,7 @@ public class SmartChatSpawnerMod implements ModInitializer {
     );
 
     private static final Set<String> INTENT_KEYWORDS = Set.of(
-            "give", "spawn", "drop", "can", "i", "want", "get", "need", "teleport", "tp", "rtp", 
+            "give", "spawn", "drop", "can", "i", "want", "get", "need", "teleport", "tp", "rtp",
             "xray", "summon", "fly", "speed", "time", "weather", "heal", "god", "rain", "day", "night"
     );
 
@@ -52,23 +73,37 @@ public class SmartChatSpawnerMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        // Initialize caches on server start
-        for (Identifier id : Registries.ITEM.getIds()) {
-            ITEM_CACHE.put(id.getPath().toLowerCase(), Registries.ITEM.get(id));
+        // Initialize caches
+        for (Identifier id : BuiltInRegistries.ITEM.keySet()) {
+            ITEM_CACHE.put(id.getPath().toLowerCase(), BuiltInRegistries.ITEM.getValue(id));
         }
-        for (Identifier id : Registries.ENTITY_TYPE.getIds()) {
-            ENTITY_CACHE.put(id.getPath().toLowerCase(), Registries.ENTITY_TYPE.get(id));
+        for (Identifier id : BuiltInRegistries.ENTITY_TYPE.keySet()) {
+            ENTITY_CACHE.put(id.getPath().toLowerCase(), BuiltInRegistries.ENTITY_TYPE.getValue(id));
         }
 
         ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
-            String text = message.getContent().getString().toLowerCase();
+            String text = message.decoratedContent().getString().toLowerCase();
             if (text.length() > 150) return; // ReDoS length safeguard
-            sender.getServer().execute(() -> parseAndExecuteRequest(sender, text));
+            MinecraftServer server = sender.level().getServer();
+            if (server == null) return;
+            server.execute(() -> parseAndExecuteRequest(sender, text));
         });
     }
 
-    private void parseAndExecuteRequest(ServerPlayerEntity player, String input) {
-        // 1. Forbidden Word Troll Trap (Explosive TNT punishment for trying to hack admin)
+    // Helper: get the ServerLevel of a player
+    private ServerLevel levelOf(ServerPlayer player) {
+        return (ServerLevel) player.level();
+    }
+
+    // Helper: run a command as the server (used for time, weather, and teleports)
+    private void runCommand(ServerLevel world, String command) {
+        MinecraftServer server = world.getServer();
+        server.getCommands().performPrefixedCommand(
+                server.createCommandSourceStack().withSuppressedOutput(), command);
+    }
+
+    private void parseAndExecuteRequest(ServerPlayer player, String input) {
+        // 1. Forbidden Word Troll Trap
         for (String forbidden : FORBIDDEN_WORDS) {
             if (input.contains(forbidden)) {
                 triggerAdminTroll(player);
@@ -159,30 +194,30 @@ public class SmartChatSpawnerMod implements ModInitializer {
             return;
         }
 
-        Identifier itemId = Registries.ITEM.getId(matchedItem);
+        Identifier itemId = BuiltInRegistries.ITEM.getKey(matchedItem);
         String itemPath = itemId.getPath();
 
         // Normalize and check blacklist (stripping plural suffixes)
         String normalizedPath = itemPath.replaceAll("s$|es$", "");
+        ServerLevel world = levelOf(player);
         if (BLOCK_BLACKLIST.contains(itemPath) || BLOCK_BLACKLIST.contains(normalizedPath)) {
-            player.getWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_VILLAGER_NO, SoundCategory.PLAYERS, 1.0f, 1.0f);
+            world.playSound(null, player.blockPosition(), SoundEvents.VILLAGER_NO, SoundSource.PLAYERS, 1.0f, 1.0f);
             return;
         }
 
-        BlockPos playerPos = player.getBlockPos();
-        player.getWorld().playSound(null, playerPos, SoundEvents.BLOCK_NOTE_BLOCK_CHIME.value(), SoundCategory.PLAYERS, 1.0f, 1.5f);
+        BlockPos playerPos = player.blockPosition();
+        world.playSound(null, playerPos, SoundEvents.NOTE_BLOCK_CHIME.value(), SoundSource.PLAYERS, 1.0f, 1.5f);
         spawnThematicParticles(player, itemPath);
 
-        ServerWorld world = player.getServerWorld();
-        if (!world.isChunkLoaded(playerPos)) return;
+        if (!world.hasChunkAt(playerPos)) return;
 
         if (matchedItem instanceof BlockItem blockItem && isInteractableBlock(blockItem.getBlock())) {
             Block block = blockItem.getBlock();
             for (int i = 0; i < count; i++) {
-                BlockPos spawnPos = playerPos.up(8 + (i * 2));
-                FallingBlockEntity fallingBlock = FallingBlockEntity.spawnFromBlock(world, spawnPos, block.getDefaultState());
+                BlockPos spawnPos = playerPos.above(8 + (i * 2));
+                FallingBlockEntity fallingBlock = FallingBlockEntity.fall(world, spawnPos, block.defaultBlockState());
                 if (fallingBlock != null) {
-                    fallingBlock.timeFalling = 1;
+                    fallingBlock.time = 1;
                     fallingBlock.dropItem = false;
                 }
             }
@@ -203,19 +238,20 @@ public class SmartChatSpawnerMod implements ModInitializer {
                         playerPos.getZ() + 0.5 + offsetZ,
                         stack.copy()
                 );
-                world.spawnEntity(itemEntity);
+                world.addFreshEntity(itemEntity);
             }
         }
     }
 
     // --- Admin Troll Trap ---
-    private void triggerAdminTroll(ServerPlayerEntity player) {
-        BlockPos playerPos = player.getBlockPos();
-        player.getWorld().playSound(null, playerPos, SoundEvents.ENTITY_VILLAGER_HURT, SoundCategory.PLAYERS, 1.0f, 0.5f);
-        
-        TntEntity tnt = new TntEntity(player.getWorld(), playerPos.getX() + 0.5, playerPos.getY() + 6.0, playerPos.getZ() + 0.5, player);
+    private void triggerAdminTroll(ServerPlayer player) {
+        ServerLevel world = levelOf(player);
+        BlockPos playerPos = player.blockPosition();
+        world.playSound(null, playerPos, SoundEvents.VILLAGER_HURT, SoundSource.PLAYERS, 1.0f, 0.5f);
+
+        PrimedTnt tnt = new PrimedTnt(world, playerPos.getX() + 0.5, playerPos.getY() + 6.0, playerPos.getZ() + 0.5, player);
         tnt.setFuse(40);
-        player.getWorld().spawnEntity(tnt);
+        world.addFreshEntity(tnt);
     }
 
     // --- Mob Summoning ---
@@ -226,7 +262,7 @@ public class SmartChatSpawnerMod implements ModInitializer {
         return false;
     }
 
-    private void executeMobSummon(ServerPlayerEntity player, String input) {
+    private void executeMobSummon(ServerPlayer player, String input) {
         int count = 1;
         Matcher numMatcher = Pattern.compile("\\b(\\d+)\\b").matcher(input);
         if (numMatcher.find()) {
@@ -245,22 +281,22 @@ public class SmartChatSpawnerMod implements ModInitializer {
         }
 
         if (targetType != null) {
-            BlockPos spawnPos = player.getBlockPos().up(4);
-            ServerWorld world = player.getServerWorld();
-            if (!world.isChunkLoaded(spawnPos)) return;
+            BlockPos spawnPos = player.blockPosition().above(4);
+            ServerLevel world = levelOf(player);
+            if (!world.hasChunkAt(spawnPos)) return;
 
             for (int i = 0; i < count; i++) {
-                Entity entity = targetType.create(world);
+                Entity entity = targetType.create(world, EntitySpawnReason.COMMAND);
                 if (entity != null) {
-                    entity.setPosition(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5);
-                    world.spawnEntity(entity);
+                    entity.setPos(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5);
+                    world.addFreshEntity(entity);
                 }
             }
-            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_EVOKER_PREPARE_SUMMON, SoundCategory.PLAYERS, 1.0f, 1.0f);
+            world.playSound(null, player.blockPosition(), SoundEvents.EVOKER_PREPARE_SUMMON, SoundSource.PLAYERS, 1.0f, 1.0f);
         }
     }
 
-    // --- Custom Naming & Lore ---
+    // --- Custom Naming ---
     private void applyCustomNaming(ItemStack stack, String input) {
         if (input.contains("named") || input.contains("called")) {
             String[] split = input.split("(named|called)\\s+");
@@ -268,106 +304,107 @@ public class SmartChatSpawnerMod implements ModInitializer {
                 String rawName = split[1].trim().split("\\b(please|plz|and|with)\\b")[0].trim();
                 if (!rawName.isEmpty()) {
                     String customName = rawName.substring(0, 1).toUpperCase() + rawName.substring(1);
-                    stack.set(DataComponentTypes.CUSTOM_NAME, Text.literal("§b" + customName));
+                    stack.set(DataComponents.CUSTOM_NAME, Component.literal(customName).withStyle(ChatFormatting.AQUA));
                 }
             }
         }
     }
 
     // --- Flight, Speed, & Healing ---
-    private void toggleFlight(ServerPlayerEntity player) {
-        boolean allowFlight = !player.getAbilities().allowFlying;
-        player.getAbilities().allowFlying = allowFlight;
-        player.sendAbilitiesUpdate();
-        player.getWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDER_DRAGON_FLAP, SoundCategory.PLAYERS, 0.5f, 1.5f);
+    private void toggleFlight(ServerPlayer player) {
+        boolean allowFlight = !player.getAbilities().mayfly;
+        player.getAbilities().mayfly = allowFlight;
+        player.onUpdateAbilities();
+        levelOf(player).playSound(null, player.blockPosition(), SoundEvents.ENDER_DRAGON_FLAP, SoundSource.PLAYERS, 0.5f, 1.5f);
     }
 
-    private void applySpeedBoost(ServerPlayerEntity player) {
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 600, 2, false, false));
-        player.getWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.PLAYERS, 1.0f, 1.5f);
+    private void applySpeedBoost(ServerPlayer player) {
+        player.addEffect(new MobEffectInstance(MobEffects.SPEED, 600, 2, false, false));
+        levelOf(player).playSound(null, player.blockPosition(), SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.5f);
     }
 
-    private void executeHealCommand(ServerPlayerEntity player) {
+    private void executeHealCommand(ServerPlayer player) {
         player.heal(20.0f);
-        player.getHungerManager().setFoodLevel(20);
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 200, 1, false, false));
-        player.getWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, SoundCategory.PLAYERS, 1.0f, 2.0f);
+        player.getFoodData().setFoodLevel(20);
+        player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 200, 1, false, false));
+        levelOf(player).playSound(null, player.blockPosition(), SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 1.0f, 2.0f);
     }
 
-    // --- Weather & Time ---
-    private void executeWeatherCommand(ServerPlayerEntity player, String input) {
-        ServerWorld world = player.getServerWorld();
+    // --- Weather & Time (done through vanilla commands so they work across versions) ---
+    private void executeWeatherCommand(ServerPlayer player, String input) {
+        ServerLevel world = levelOf(player);
         if (input.contains("rain") || input.contains("storm")) {
-            world.setWeather(0, 6000, true, false);
+            runCommand(world, "weather rain");
         } else {
-            world.setWeather(6000, 0, false, false);
+            runCommand(world, "weather clear");
         }
-        world.playSound(null, player.getBlockPos(), SoundEvents.WEATHER_RAIN_ABOVE, SoundCategory.PLAYERS, 1.0f, 1.0f);
+        world.playSound(null, player.blockPosition(), SoundEvents.WEATHER_RAIN_ABOVE, SoundSource.PLAYERS, 1.0f, 1.0f);
     }
 
-    private void executeTimeCommand(ServerPlayerEntity player, String input) {
-        ServerWorld world = player.getServerWorld();
+    private void executeTimeCommand(ServerPlayer player, String input) {
+        ServerLevel world = levelOf(player);
         if (input.contains("night")) {
-            world.setTimeOfDay(18000);
+            runCommand(world, "time set night");
         } else {
-            world.setTimeOfDay(1000);
+            runCommand(world, "time set day");
         }
-        world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_PORTAL_TRIGGER, SoundCategory.PLAYERS, 0.5f, 1.0f);
+        world.playSound(null, player.blockPosition(), SoundEvents.PORTAL_TRIGGER, SoundSource.PLAYERS, 0.5f, 1.0f);
     }
 
     // --- Material Glow Particles ---
-    private void spawnThematicParticles(ServerPlayerEntity player, String itemPath) {
-        BlockPos pos = player.getBlockPos().up(3);
-        ServerWorld world = player.getServerWorld();
+    private void spawnThematicParticles(ServerPlayer player, String itemPath) {
+        BlockPos pos = player.blockPosition().above(3);
+        ServerLevel world = levelOf(player);
 
         if (itemPath.contains("diamond")) {
-            world.spawnParticles(ParticleTypes.ENCHANT, pos.getX(), pos.getY(), pos.getZ(), 25, 0.5, 0.5, 0.5, 0.1);
+            world.sendParticles(ParticleTypes.ENCHANT, pos.getX(), pos.getY(), pos.getZ(), 25, 0.5, 0.5, 0.5, 0.1);
         } else if (itemPath.contains("gold")) {
-            world.spawnParticles(ParticleTypes.HAPPY_VILLAGER, pos.getX(), pos.getY(), pos.getZ(), 20, 0.5, 0.5, 0.5, 0.1);
+            world.sendParticles(ParticleTypes.HAPPY_VILLAGER, pos.getX(), pos.getY(), pos.getZ(), 20, 0.5, 0.5, 0.5, 0.1);
         } else if (itemPath.contains("emerald")) {
-            world.spawnParticles(ParticleTypes.COMPOSTER, pos.getX(), pos.getY(), pos.getZ(), 20, 0.5, 0.5, 0.5, 0.1);
+            world.sendParticles(ParticleTypes.COMPOSTER, pos.getX(), pos.getY(), pos.getZ(), 20, 0.5, 0.5, 0.5, 0.1);
         } else if (itemPath.contains("netherite")) {
-            world.spawnParticles(ParticleTypes.SOUL_FIRE_FLAME, pos.getX(), pos.getY(), pos.getZ(), 15, 0.5, 0.5, 0.5, 0.05);
+            world.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, pos.getX(), pos.getY(), pos.getZ(), 15, 0.5, 0.5, 0.5, 0.05);
         } else {
-            world.spawnParticles(ParticleTypes.PORTAL, pos.getX(), pos.getY(), pos.getZ(), 15, 0.5, 0.5, 0.5, 0.2);
+            world.sendParticles(ParticleTypes.PORTAL, pos.getX(), pos.getY(), pos.getZ(), 15, 0.5, 0.5, 0.5, 0.2);
         }
     }
 
     // --- Safe RTP with Liquid Re-rolls ---
-    private void executeRandomTeleport(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+    private void executeRandomTeleport(ServerPlayer player) {
+        ServerLevel world = levelOf(player);
         Random rand = new Random();
         int radius = 500;
         int x = 0, y = 0, z = 0;
-        boolean safeLanding = false;
 
         for (int attempt = 0; attempt < 10; attempt++) {
             x = player.getBlockX() + rand.nextInt(radius * 2) - radius;
             z = player.getBlockZ() + rand.nextInt(radius * 2) - radius;
-            y = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z);
+            y = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
 
             BlockPos landingPos = new BlockPos(x, y - 1, z);
             Block block = world.getBlockState(landingPos).getBlock();
 
             if (block != Blocks.WATER && block != Blocks.LAVA && block != Blocks.AIR) {
-                safeLanding = true;
                 break;
             }
         }
 
-        player.teleport(world, x + 0.5, y, z + 0.5, player.getYaw(), player.getPitch());
-        world.playSound(null, player.getBlockPos(), SoundEvents.ITEM_CHORUS_FRUIT_TELEPORT, SoundCategory.PLAYERS, 1.0f, 1.0f);
+        String uuid = player.getUUID().toString();
+        // "execute as ... at @s" keeps the teleport inside the player's own dimension
+        runCommand(world, "execute as " + uuid + " at @s run tp @s " + (x + 0.5) + " " + y + " " + (z + 0.5));
+        world.playSound(null, player.blockPosition(), SoundEvents.CHORUS_FRUIT_TELEPORT, SoundSource.PLAYERS, 1.0f, 1.0f);
     }
 
-    private void executePlayerTeleport(ServerPlayerEntity player, String input) {
+    private void executePlayerTeleport(ServerPlayer player, String input) {
         String[] parts = input.split("to\\s+");
         if (parts.length < 2) return;
 
         String query = parts[1].trim().toLowerCase();
-        ServerPlayerEntity bestMatch = null;
+        ServerPlayer bestMatch = null;
         int bestDistance = Integer.MAX_VALUE;
+        ServerLevel world = levelOf(player);
 
-        for (ServerPlayerEntity onlinePlayer : player.getServer().getPlayerManager().getPlayerList()) {
+        for (ServerPlayer onlinePlayer : world.getServer().getPlayerList().getPlayers()) {
             String targetName = onlinePlayer.getName().getString().toLowerCase();
             if (targetName.startsWith(query) || targetName.contains(query)) {
                 bestMatch = onlinePlayer;
@@ -381,16 +418,18 @@ public class SmartChatSpawnerMod implements ModInitializer {
         }
 
         if (bestMatch != null && bestMatch != player) {
-            player.teleport(bestMatch.getServerWorld(), bestMatch.getX(), bestMatch.getY(), bestMatch.getZ(), player.getYaw(), player.getPitch());
-            player.getWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, SoundCategory.PLAYERS, 1.0f, 1.0f);
+            // Teleporting to an entity works across dimensions
+            runCommand(world, "tp " + player.getUUID() + " " + bestMatch.getUUID());
+            world.playSound(null, player.blockPosition(), SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.0f, 1.0f);
         }
     }
 
-    private void executeXrayCommand(ServerPlayerEntity player, String input) {
+    private void executeXrayCommand(ServerPlayer player, String input) {
+        ServerLevel world = levelOf(player);
         if (input.contains("off") || input.contains("stop") || input.contains("disable")) {
-            player.removeStatusEffect(StatusEffects.NIGHT_VISION);
-            player.removeStatusEffect(StatusEffects.GLOWING);
-            player.getWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, SoundCategory.PLAYERS, 1.0f, 0.5f);
+            player.removeEffect(MobEffects.NIGHT_VISION);
+            player.removeEffect(MobEffects.GLOWING);
+            world.playSound(null, player.blockPosition(), SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 1.0f, 0.5f);
             return;
         }
 
@@ -402,36 +441,38 @@ public class SmartChatSpawnerMod implements ModInitializer {
             } catch (NumberFormatException ignored) {}
         }
 
-        player.removeStatusEffect(StatusEffects.NIGHT_VISION);
-        player.removeStatusEffect(StatusEffects.GLOWING);
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.NIGHT_VISION, durationTicks, 0, false, false));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, durationTicks, 0, false, false));
-        player.getWorld().playSound(null, player.getBlockPos(), SoundEvents.BLOCK_BEACON_ACTIVATE, SoundCategory.PLAYERS, 1.0f, 1.2f);
+        player.removeEffect(MobEffects.NIGHT_VISION);
+        player.removeEffect(MobEffects.GLOWING);
+        player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, durationTicks, 0, false, false));
+        player.addEffect(new MobEffectInstance(MobEffects.GLOWING, durationTicks, 0, false, false));
+        world.playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.0f, 1.2f);
     }
 
-    private void punishRudePlayer(ServerPlayerEntity player, String input) {
-        BlockPos playerPos = player.getBlockPos();
-        player.getWorld().playSound(null, playerPos, SoundEvents.ENTITY_VILLAGER_HURT, SoundCategory.PLAYERS, 1.0f, 0.8f);
+    private void punishRudePlayer(ServerPlayer player, String input) {
+        ServerLevel world = levelOf(player);
+        BlockPos playerPos = player.blockPosition();
+        world.playSound(null, playerPos, SoundEvents.VILLAGER_HURT, SoundSource.PLAYERS, 1.0f, 0.8f);
 
         if (input.contains("block")) {
-            FallingBlockEntity anvil = FallingBlockEntity.spawnFromBlock(player.getWorld(), playerPos.up(8), Blocks.ANVIL.getDefaultState());
+            FallingBlockEntity anvil = FallingBlockEntity.fall(world, playerPos.above(8), Blocks.ANVIL.defaultBlockState());
             if (anvil != null) {
-                anvil.timeFalling = 1;
+                anvil.time = 1;
                 anvil.dropItem = true;
             }
         } else {
             ItemStack potato = new ItemStack(Items.POISONOUS_POTATO, 3);
-            ItemEntity entity = new ItemEntity(player.getWorld(), playerPos.getX() + 0.5, playerPos.getY() + 3.0, playerPos.getZ() + 0.5, potato);
-            player.getWorld().spawnEntity(entity);
+            ItemEntity entity = new ItemEntity(world, playerPos.getX() + 0.5, playerPos.getY() + 3.0, playerPos.getZ() + 0.5, potato);
+            world.addFreshEntity(entity);
         }
     }
 
-    private void spawnGagItem(ServerPlayerEntity player, Item gagItem) {
-        BlockPos playerPos = player.getBlockPos();
-        player.getWorld().playSound(null, playerPos, SoundEvents.ENTITY_VILLAGER_AMBIENT, SoundCategory.PLAYERS, 1.0f, 1.0f);
+    private void spawnGagItem(ServerPlayer player, Item gagItem) {
+        ServerLevel world = levelOf(player);
+        BlockPos playerPos = player.blockPosition();
+        world.playSound(null, playerPos, SoundEvents.VILLAGER_AMBIENT, SoundSource.PLAYERS, 1.0f, 1.0f);
         ItemStack stack = new ItemStack(gagItem, 1);
-        ItemEntity entity = new ItemEntity(player.getWorld(), playerPos.getX() + 0.5, playerPos.getY() + 3.0, playerPos.getZ() + 0.5, stack);
-        player.getWorld().spawnEntity(entity);
+        ItemEntity entity = new ItemEntity(world, playerPos.getX() + 0.5, playerPos.getY() + 3.0, playerPos.getZ() + 0.5, stack);
+        world.addFreshEntity(entity);
     }
 
     private String expandSlang(String input) {
@@ -479,14 +520,15 @@ public class SmartChatSpawnerMod implements ModInitializer {
     }
 
     private boolean isInteractableBlock(Block block) {
-        if (block instanceof BlockWithEntity) return true;
+        if (block instanceof BaseEntityBlock) return true;
         return block instanceof AnvilBlock || block instanceof CraftingTableBlock || block instanceof EnderChestBlock ||
                block instanceof EnchantingTableBlock || block instanceof LoomBlock || block instanceof CartographyTableBlock ||
                block instanceof GrindstoneBlock || block instanceof StonecutterBlock || block instanceof SmithingTableBlock;
     }
 
-    private void applyEnchantmentsToStack(ServerPlayerEntity player, ItemStack stack, String input) {
-        var registry = player.getWorld().getRegistryManager().get(RegistryKeys.ENCHANTMENT);
+    private void applyEnchantmentsToStack(ServerPlayer player, ItemStack stack, String input) {
+        HolderLookup.RegistryLookup<Enchantment> registry =
+                levelOf(player).registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
 
         if (input.contains("efficiency") || input.contains("effcency") || input.contains("fast mining")) {
             addEnc(registry, stack, "efficiency", 5);
@@ -505,10 +547,9 @@ public class SmartChatSpawnerMod implements ModInitializer {
         }
     }
 
-    private void addEnc(net.minecraft.registry.Registry<Enchantment> registry, ItemStack stack, String name, int level) {
-        registry.getEntry(Identifier.of("minecraft", name)).ifPresent(entry -> {
-            stack.addEnchantment(entry, level);
-        });
+    private void addEnc(HolderLookup.RegistryLookup<Enchantment> registry, ItemStack stack, String name, int level) {
+        ResourceKey<Enchantment> key = ResourceKey.create(Registries.ENCHANTMENT, Identifier.withDefaultNamespace(name));
+        registry.get(key).ifPresent(holder -> stack.enchant(holder, level));
     }
 
     private int getLevenshteinDistance(String s1, String s2) {
