@@ -22,7 +22,6 @@ jobs:
 
       - name: Build Project
         run: gradle build
-        # Removed working-directory since files are now at root!
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
