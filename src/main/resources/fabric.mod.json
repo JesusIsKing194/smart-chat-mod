@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "smartchatmod",
+  "version": "${version}",
+  "name": "Smart Chat Spawner Mod",
+  "description": "Chat-controlled items, teleports, portals, games, stories and easter eggs with a built-in smart chat assistant.",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.example.smartchat.SmartChatSpawnerMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.1",
+    "minecraft": ">=26.2-",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
