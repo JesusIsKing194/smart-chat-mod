@@ -20,9 +20,9 @@ jobs:
         with:
           gradle-version: '9.4.0'
 
-      - name: Build Project inside Mod Directory
+      - name: Build Project
         run: gradle build
-        working-directory: src/main/java/com/example/smartchat
+        # Removed working-directory since files are now at root!
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
