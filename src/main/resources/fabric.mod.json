@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
+  "schemaVersion": 1,
   "id": "smartchatmod",
-  "version": "1.0.0",
+  "version": "${version}",
   "name": "Smart Chat Spawner Mod",
   "description": "Chat-controlled items, mobs, and administration mod.",
   "environment": "*",
@@ -11,9 +11,9 @@
     ]
   },
   "depends": {
-  "fabricloader": ">=0.19.1",
-  "minecraft": ">=26.2-",
-  "java": ">=25",
-  "fabric-api": "*"
-}
+    "fabricloader": ">=0.19.1",
+    "minecraft": ">=26.2-",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
 }
