@@ -101,10 +101,12 @@ public final class PortalHandler implements ChatRouter.Handler {
     public boolean handle(ChatContext ctx) {
         if (!ENABLED.asBoolean()) return false;
 
-        boolean askLike = ctx.intents().requestCue || ctx.polite;
-        boolean wantsPortal = ctx.intents().primary() == Intent.PORTAL
-                || (askLike && ctx.has("portal") && !ctx.hasAny("end portal", "ruined portal", "portal frame",
-                "teleport", "tp", "rtp", "take me", "send me", "go to"));
+        // it has to sound like a request ("can i...", "give me...", "please") or be a very short message
+        // like "nether portal", so a sentence such as "I built a nether portal yesterday" is ignored
+        boolean askLike = ctx.intents().requestCue || ctx.polite || ctx.tokens.size() <= 3;
+        boolean wantsPortal = askLike && (ctx.intents().primary() == Intent.PORTAL
+                || (ctx.has("portal") && !ctx.hasAny("end portal", "ruined portal", "portal frame",
+                "teleport", "tp", "rtp", "take me", "send me", "go to")));
         if (!wantsPortal) return false;
 
         ServerPlayer player = ctx.player;
