@@ -1,21 +1,19 @@
 {
-  "schemaVersion": 1,
-  "id": "smartchat",
-  "version": "${version}",
-  "name": "Smart Chat",
-  "description": "Control Minecraft with natural-language chat, a settings UI and keybinds.",
-  "authors": ["JesusIsKing194"],
-  "license": "All-Rights-Reserved",
-  "environment": "*",
-  "entrypoints": {
-    "main": ["eu.codexe.smartchat.SmartChatMod"],
-    "client": ["eu.codexe.smartchat.client.SmartChatClient"]
-  },
-  "mixins": ["smartchat.mixins.json"],
-  "depends": {
-    "fabricloader": ">=${min_loader_version}",
-    "minecraft": "~${minecraft_version}",
-    "java": ">=${java_version}",
-    "fabric-api": "*"
-  }
+  "schemaVersion": 1,
+  "id": "smartchatmod",
+  "version": "${version}",
+  "name": "Smart Chat Spawner Mod",
+  "description": "Chat-controlled items, teleports, portals, games, stories and easter eggs with a built-in smart chat assistant.",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.example.smartchat.SmartChatSpawnerMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.1",
+    "minecraft": ">=26.2-",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
 }
