@@ -89,7 +89,9 @@ public final class ItemHandler implements ChatRouter.Handler {
     }
 
     private static boolean hint(ChatContext ctx) {
-        boolean clearRequest = ctx.polite || ctx.hasAny("give me", "gimme", "get me", "i want", "i need", "spawn");
+        // being polite alone ("thanks", "plz") is not an item request; it has to actually ask for something
+        boolean clearRequest = ctx.hasAny("give me", "gimme", "get me", "i want", "i need", "spawn", "can i have",
+                "can i get", "could i have", "could i get", "may i have", "i would like", "id like");
         if (!clearRequest) return false;
         if (Settings.HINTS.asBoolean()) {
             ctx.reply("I couldn't find that item. Try its name, like \"diamond sword\" or \"totem\".");
